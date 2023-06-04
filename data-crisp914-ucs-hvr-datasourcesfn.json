@@ -1,0 +1,225 @@
+{
+  "StartAt": "filterDatasets",
+  "States": {
+    "filterDatasets": {
+      "Next": "datasetLoads",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$",
+          "Next": "FilterErrSeverity"
+        }
+      ],
+      "Type": "Task",
+      "InputPath": "$",
+      "ResultPath": "$.dataset_details",
+      "Resource": "arn:aws:lambda:us-west-2:513869633192:function:data-crisp914-ucs-hvr-filterdataset",
+      "Parameters": {
+        "config_bucket.$": "$.config_bucket",
+        "config_file.$": "$.config_file",
+        "input_file_path.$": "$.input_file_path",
+        "execution_id.$": "$$.Execution.Name"
+      }
+    },
+    "datasetLoads": {
+      "Type": "Parallel",
+      "ResultPath": "$.results",
+      "Next": "validateResults",
+      "Branches": [
+        {
+          "StartAt": "FactsLoad",
+          "States": {
+            "FactsLoad": {
+              "Type": "Map",
+              "End": true,
+              "Iterator": {
+                "StartAt": "triggerFactSFN",
+                "States": {
+                  "triggerFactSFN": {
+                    "Next": "FactExecutionComplete",
+                    "Catch": [
+                      {
+                        "ErrorEquals": [
+                          "States.ALL"
+                        ],
+                        "ResultPath": "$",
+                        "Next": "FactExecutionComplete"
+                      }
+                    ],
+                    "Type": "Task",
+                    "ResultPath": "$",
+                    "ResultSelector": {
+                      "ExecutionArn.$": "$.ExecutionArn",
+                      "status.$": "$.Status"
+                    },
+                    "Resource": "arn:aws:states:::states:startExecution.sync:2",
+                    "Parameters": {
+                      "Input.$": "$.input",
+                      "StateMachineArn": "arn:aws:states:us-west-2:513869633192:stateMachine:data-crisp914-ucs-hvr-facts",
+                      "Name.$": "$.execution_name"
+                    }
+                  },
+                  "FactExecutionComplete": {
+                    "Type": "Pass",
+                    "End": true
+                  }
+                }
+              },
+              "ItemsPath": "$.dataset_details.fact",
+              "MaxConcurrency": 5
+            }
+          }
+        },
+        {
+          "StartAt": "DimensionsLoad",
+          "States": {
+            "DimensionsLoad": {
+              "Type": "Map",
+              "End": true,
+              "Iterator": {
+                "StartAt": "triggerDimSFN",
+                "States": {
+                  "triggerDimSFN": {
+                    "Next": "DimExecutionComplete",
+                    "Catch": [
+                      {
+                        "ErrorEquals": [
+                          "States.ALL"
+                        ],
+                        "ResultPath": "$",
+                        "Next": "DimExecutionComplete"
+                      }
+                    ],
+                    "Type": "Task",
+                    "ResultPath": "$",
+                    "ResultSelector": {
+                      "ExecutionArn.$": "$.ExecutionArn",
+                      "status.$": "$.Status"
+                    },
+                    "Resource": "arn:aws:states:::states:startExecution.sync:2",
+                    "Parameters": {
+                      "Input.$": "$.input",
+                      "StateMachineArn": "arn:aws:states:us-west-2:513869633192:stateMachine:data-crisp914-ucs-hvr-dimensions",
+                      "Name.$": "$.execution_name"
+                    }
+                  },
+                  "DimExecutionComplete": {
+                    "Type": "Pass",
+                    "End": true
+                  }
+                }
+              },
+              "ItemsPath": "$.dataset_details.dim",
+              "MaxConcurrency": 5
+            }
+          }
+        }
+      ]
+    },
+    "validateResults": {
+      "Next": "ArchiveExecutionInput",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$",
+          "Next": "ValidateResultsErrSeverity"
+        }
+      ],
+      "Type": "Task",
+      "InputPath": "$.results",
+      "ResultPath": null,
+      "Resource": "arn:aws:lambda:us-west-2:513869633192:function:data-crisp914-ucs-hvr-validateresult"
+    },
+    "ArchiveExecutionInput": {
+      "Next": "JobDone",
+      "Type": "Task",
+      "ResultPath": null,
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-west-2:513869633192:Deploy-crisp914-edw-orch-ucs-ucshvrstack-crisp914edworchucsucshvrsuccessTopic7EA51F40-YIvOtXpeBG2V",
+        "Message": {
+          "dataset_name": "execution-input",
+          "input_list.$": "States.Array($.input_file_path)"
+        }
+      }
+    },
+    "JobDone": {
+      "Type": "Pass",
+      "End": true
+    },
+    "ValidateResultsErrSeverity": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.Cause",
+          "StringMatches": "*errorMessage*",
+          "Next": "PublishFailure"
+        },
+        {
+          "Variable": "$.Cause",
+          "StringMatches": "*errorMessage*",
+          "Next": "PublishFailure"
+        }
+      ],
+      "Default": "ArchiveExecutionInput"
+    },
+    "PublishFailure": {
+      "Next": "JobFailed",
+      "Type": "Task",
+      "ResultPath": null,
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-west-2:513869633192:Deploy-crisp914-edw-orch-ucs-ucshvrstack-crisp914edworchucsucshvrfailureTopicB0C34E41-g9XM6AVduxYK",
+        "Message.$": "$"
+      }
+    },
+    "FilterErrSeverity": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.Cause",
+          "StringMatches": "*errorMessage*",
+          "Next": "PublishFailure"
+        },
+        {
+          "Variable": "$.Cause",
+          "StringMatches": "*errorMessage*",
+          "Next": "PublishFailure"
+        }
+      ],
+      "Default": "datasetLoads"
+    },
+    "JobFailed": {
+      "Type": "Fail",
+      "Comment": "Step Function Failed"
+    }
+  }
+}
