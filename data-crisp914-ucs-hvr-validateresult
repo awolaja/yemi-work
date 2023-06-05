@@ -1,0 +1,25 @@
+This Python code is a Lambda function that serves as the handler for an AWS Lambda service. It receives an event and context as inputs and performs various operations based on the event data. Let's break down the code function by function:
+
+import json: Imports the JSON module to handle JSON data.
+from com_unfi_dataplatform.unfi_common_libraries.logger import get_logger, set_logger: Imports the necessary logger functions from a custom library.
+def lambda_handler(event, context):: Defines the lambda_handler function, which is the entry point for the Lambda function.
+logger_obj = set_logger(context.function_name, 'INFO'): Calls the set_logger function to initialize a logger object with the function name and log level.
+logger_obj.info('Inisde Function %s', context.function_name): Logs an informational message indicating that the function is inside the lambda_handler function.
+logger_obj.info('Event received: %s', event): Logs the event data received by the Lambda function.
+if isinstance(event, list):: Checks if the event is of type list.
+error_sfn_list = []: Initializes an empty list to store failed Step Function execution ARNs.
+for datasets_execution_detail_list in event:: Iterates over the list of datasets_execution_detail_list within the event.
+for dataset_execution_dict in datasets_execution_detail_list:: Iterates over the dataset_execution_dict within the datasets_execution_detail_list.
+if 'status' in dataset_execution_dict:: Checks if the 'status' key exists in the dataset_execution_dict.
+if dataset_execution_dict['status'].upper() == 'SUCCEEDED':: Checks if the 'status' value is 'SUCCEEDED'.
+logger_obj.info('Stepfunction %s status is successfull', dataset_execution_dict.get('ExecutionArn')): Logs a message indicating that the Step Function execution with the provided 'ExecutionArn' was successful.
+elif dataset_execution_dict['status'].upper() in ['FAILED', 'ABORTED', 'TIMED_OUT']:: Checks if the 'status' value is one of 'FAILED', 'ABORTED', or 'TIMED_OUT'.
+logger_obj.info('Stepfunction %s status is %s', dataset_execution_dict.get('ExecutionArn'), dataset_execution_dict['status'].upper()): Logs a message indicating that the Step Function execution with the provided 'ExecutionArn' failed with the corresponding 'status'.
+error_sfn_list.append(dataset_execution_dict.get('ExecutionArn')): Appends the Step Function execution ARN to the error_sfn_list.
+elif 'Error' in dataset_execution_dict:: Checks if the 'Error' key exists in the dataset_execution_dict.
+cause_dict = json.loads(dataset_execution_dict['Cause']): Parses the 'Cause' JSON string from the dataset_execution_dict.
+if 'ExecutionArn' in cause_dict:: Checks if the 'ExecutionArn' key exists in the cause_dict.
+logger_obj.info('Stepfunction %s status is %s', cause_dict.get('ExecutionArn'), cause_dict['Status'].upper()): Logs a message indicating that the Step Function execution with the provided 'ExecutionArn' failed with the corresponding 'Status' from the cause_dict.
+error_sfn_list.append(cause_dict.get('ExecutionArn')): Appends the Step Function execution ARN to the error_sfn_list.
+else:: Executes if none of the previous conditions are met.
+error_sfn_list.append(dataset_execution_dict): Appends the dataset_execution_dict to the error_sfn
