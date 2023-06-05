@@ -1,0 +1,27 @@
+This JSON represents an AWS Step Functions state machine definition. Step Functions is a service provided by Amazon Web Services (AWS) that allows you to coordinate and orchestrate multiple AWS services into a serverless workflow.
+
+Let's break down the JSON function by function:
+
+"StartAt": "filterDatasets": This specifies the initial state of the state machine. When the state machine is started, it will begin execution at the state named "filterDatasets".
+"States": This is an object that defines the states and their properties within the state machine.
+"filterDatasets": This is the first state of the state machine. It is a Task state that performs a specific operation. The key properties of this state are:
+"Next": "datasetLoads": This specifies the state that the state machine should transition to after completing this state.
+"Retry": This defines the retry behavior in case of certain errors. In this case, if the Lambda function encounters the errors specified in "ErrorEquals", it will retry with exponential backoff.
+"Catch": This defines error handling in case of certain errors. If any error specified in "ErrorEquals" occurs, the state machine will transition to the state named "FilterErrSeverity".
+"Type": "Task": Indicates that this state is a Task state.
+"InputPath": "$": Specifies that the input to this state should be the entire input provided to the state machine.
+"ResultPath": "$.dataset_details": Specifies where the output of this state should be stored in the state machine's execution data.
+"Resource": "arn:aws:lambda:us-west-2:513869633192:function:data-crisp914-ucs-hvr-filterdataset": Specifies the ARN (Amazon Resource Name) of the AWS Lambda function to be executed in this state.
+"Parameters": Specifies the input parameters to be passed to the Lambda function.
+"datasetLoads": This state is a Parallel state, which allows for concurrent execution of multiple branches. It contains two branches: "FactsLoad" and "DimensionsLoad". The key properties of this state are:
+"ResultPath": "$.results": Specifies where the outputs of the branches should be stored in the state machine's execution data.
+"Next": "validateResults": Specifies the state to transition to after completing the parallel execution.
+"Branches": Specifies the branches to be executed in parallel.
+"FactsLoad" and "DimensionsLoad": These are Map states within the parallel execution. They iterate over arrays of dataset details and perform tasks on each item concurrently. The key properties of these states are similar to the "filterDatasets" state, specifying the Lambda function to be executed and the input parameters.
+"validateResults": This state is a Task state that validates the results of the parallel execution. The key properties of this state are:
+"Next": "ArchiveExecutionInput": Specifies the state to transition to after completing this state.
+"Retry": Defines the retry behavior in case of certain errors.
+"Catch": Defines error handling in case of certain errors.
+"Type": "Task": Indicates that this state is a Task state.
+"InputPath": "$.results": Specifies that the input to this state should be the results of the parallel execution.
+"Resource": "arn:aws:lambda:us-west-2:513869633192:function:data-crisp914-ucs-hvr-validateresult": Specifies the ARN of the AWS Lambda function to be executed
